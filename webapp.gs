@@ -1,303 +1,266 @@
 // ===== 設定 =====
-const SHEET_NAME = '管理シート';
-const HEADER_ROW = 6;
 const CALENDAR_ID = '916b37fd8ea730ceae1f54f1ea729ac6f96c033fdfec9304ae3bccfed3af6579@group.calendar.google.com';
+const FILE_NAME   = 'task-management-tasks.json';
+const FILE_KEY    = 'TASKS_FILE_ID';   // ScriptProperties のキー
 
-const COL = {
-  DONE:      2,  // B: 完了
-  REGISTER:  3,  // C: カレンダー登録
-  PRIORITY:  4,  // D: 優先
-  DATE:      5,  // E: 日付
-  TIME:      6,  // F: 締切時間
-  TASK:      7,  // G: タスク名
-  CATEGORY:  8,  // H: カテゴリー
-  NOTE:      9,  // I: 備考
-  EVENT_ID:  10, // J: カレンダーイベントID
-  SKIP:      11, // K: カレンダー登録不要
-  AUTO_FLAG: 12  // L: TD自動付与フラグ
-};
-
-// ===== JSON API エントリーポイント =====
-// GitHub Pages からの fetch リクエストを受け付ける
+// ===== API エントリーポイント =====
 function doGet(e) {
-  // CORS ヘッダーを含むレスポンスを返す
   const p = (e && e.parameter) ? e.parameter : {};
   const action = p.action || '';
   let result;
-
   try {
     switch (action) {
-      case 'getTasks':
-        result = getIncompleteTasks();
-        break;
-      case 'addTask':
-        result = addTask(p.data);
-        break;
-      case 'completeTask':
-        result = completeTask(Number(p.row));
-        break;
-      case 'registerCalendar':
-        result = registerCalendar(Number(p.row));
-        break;
-      case 'togglePriority':
-        result = togglePriority(Number(p.row));
-        break;
-      case 'updateTask':
-        result = updateTask(p.data);
-        break;
-      default:
-        result = JSON.stringify({ error: 'unknown action: ' + action });
+      case 'getTasks':         result = getIncompleteTasks(); break;
+      case 'addTask':          result = addTask(p.data);      break;
+      case 'completeTask':     result = completeTask(p.row);  break;
+      case 'registerCalendar': result = registerCalendar(p.row); break;
+      case 'togglePriority':   result = togglePriority(p.row);   break;
+      case 'updateTask':       result = updateTask(p.data);   break;
+      case 'backup':           result = JSON.stringify(loadTasks_()); break;
+      default: result = JSON.stringify({ error: 'unknown action: ' + action });
     }
   } catch(err) {
     result = JSON.stringify({ error: err.toString() });
   }
-
   return ContentService.createTextOutput(result)
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function getSheet_() {
-  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+// ===== Drive JSON ストレージ =====
+
+/**
+ * タスクファイルを取得（なければ新規作成）
+ * ScriptProperties にファイルIDを記録して高速アクセス
+ */
+function getOrCreateFile_() {
+  const props  = PropertiesService.getScriptProperties();
+  const fileId = props.getProperty(FILE_KEY);
+  if (fileId) {
+    try {
+      const f = DriveApp.getFileById(fileId);
+      if (!f.isTrashed()) return f;
+    } catch(_) { /* ファイルが削除されていた */ }
+  }
+  // 新規作成
+  const file = DriveApp.createFile(FILE_NAME, '[]', MimeType.PLAIN_TEXT);
+  props.setProperty(FILE_KEY, file.getId());
+  Logger.log('タスクファイルを新規作成しました: ' + file.getId());
+  return file;
 }
 
-// ===== API =====
+/** Drive JSON からタスク配列を読み込む */
+function loadTasks_() {
+  try {
+    const content = getOrCreateFile_().getBlob().getDataAsString('UTF-8');
+    const parsed  = JSON.parse(content);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch(_) { return []; }
+}
+
+/** タスク配列を Drive JSON に書き込む */
+function saveTasks_(tasks) {
+  const file    = getOrCreateFile_();
+  const content = JSON.stringify(tasks, null, 2);
+  const res = UrlFetchApp.fetch(
+    'https://www.googleapis.com/upload/drive/v3/files/' + file.getId() + '?uploadType=media',
+    {
+      method:          'PATCH',
+      contentType:     'text/plain; charset=utf-8',
+      headers:         { 'Authorization': 'Bearer ' + ScriptApp.getOAuthToken() },
+      payload:         content,
+      muteHttpExceptions: true
+    }
+  );
+  if (res.getResponseCode() !== 200) {
+    throw new Error('Drive保存エラー ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+  }
+}
+
+/** ユニークIDを生成 */
+function genId_() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// ===== API 実装 =====
 
 function getIncompleteTasks() {
   try {
-    const sheet = getSheet_();
-    const lastRow = sheet.getLastRow();
-    if (lastRow <= HEADER_ROW) return JSON.stringify([]);
+    const tasks = loadTasks_();
+    const incomplete = tasks.filter(t => !t.done && t.task && String(t.task).trim() !== '');
 
-    const numRows = lastRow - HEADER_ROW;
-    const data = sheet.getRange(HEADER_ROW + 1, 1, numRows, COL.AUTO_FLAG).getValues();
-    const tz = Session.getScriptTimeZone();
-
-    const tasks = [];
-    data.forEach((row, i) => {
-      if (row[COL.DONE - 1] === true) return;
-      const taskName = row[COL.TASK - 1];
-      if (!taskName || String(taskName).trim() === '') return;
-
-      const dateVal = row[COL.DATE - 1];
-      const timeVal = row[COL.TIME - 1];
-
-      let dateStr = '', dateISO = '';
-      if (dateVal instanceof Date && !isNaN(dateVal)) {
-        dateStr = Utilities.formatDate(dateVal, tz, 'MM/dd');
-        dateISO = Utilities.formatDate(dateVal, tz, 'yyyy-MM-dd');
-      }
-
-      let timeStr = '';
-      if (timeVal instanceof Date && !isNaN(timeVal)) {
-        timeStr = Utilities.formatDate(timeVal, tz, 'HH:mm');
-      }
-
-      tasks.push({
-        row:        HEADER_ROW + 1 + i,
-        priority:   row[COL.PRIORITY  - 1] === true,
-        registered: row[COL.REGISTER  - 1] === true,
-        date:       dateStr,
-        dateISO:    dateISO,
-        time:       timeStr,
-        task:       String(taskName),
-        category:   String(row[COL.CATEGORY - 1] || ''),
-        note:       String(row[COL.NOTE - 1] || ''),
-        hasEvent:   !!row[COL.EVENT_ID - 1],
-        skip:       row[COL.SKIP - 1] === true
-      });
-    });
-
-    tasks.sort((a, b) => {
+    // 優先 → 日付昇順 → 時間昇順
+    incomplete.sort((a, b) => {
       if (a.priority !== b.priority) return a.priority ? -1 : 1;
-      if (a.dateISO !== b.dateISO) {
-        if (!a.dateISO) return 1;
-        if (!b.dateISO) return -1;
-        return a.dateISO < b.dateISO ? -1 : 1;
+      if ((a.date || '') !== (b.date || '')) {
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return a.date < b.date ? -1 : 1;
       }
       if (!a.time && b.time) return 1;
       if (a.time && !b.time) return -1;
-      return a.time < b.time ? -1 : 1;
+      return (a.time || '') < (b.time || '') ? -1 : 1;
     });
 
-    return JSON.stringify(tasks);
-  } catch (e) {
+    const result = incomplete.map(t => {
+      let dateStr = '';
+      if (t.date) {
+        const p = t.date.split('-');
+        dateStr = p[1] + '/' + p[2];
+      }
+      return {
+        row:        t.id,          // フロントエンドは "row" フィールドを識別子として使用
+        priority:   !!t.priority,
+        registered: !!t.registered,
+        date:       dateStr,
+        dateISO:    t.date     || '',
+        time:       t.time     || '',
+        task:       String(t.task),
+        category:   String(t.category || ''),
+        note:       String(t.note     || ''),
+        hasEvent:   !!t.eventId,
+        skip:       !!t.skip
+      };
+    });
+
+    return JSON.stringify(result);
+  } catch(e) {
     return JSON.stringify({ error: e.toString() });
   }
 }
 
 function addTask(json) {
   try {
-    const d = JSON.parse(json);
-    const sheet = getSheet_();
-    const maxRows = sheet.getMaxRows();
-    const taskColVals = sheet.getRange(HEADER_ROW + 1, COL.TASK, maxRows - HEADER_ROW, 1).getValues();
-    let lastTaskRow = HEADER_ROW;
-    for (let i = 0; i < taskColVals.length; i++) {
-      if (taskColVals[i][0] && String(taskColVals[i][0]).trim() !== '') {
-        lastTaskRow = HEADER_ROW + 1 + i;
-      }
-    }
-    const newRow = lastTaskRow + 1;
-
-    if (newRow > maxRows) {
-      sheet.insertRowsAfter(maxRows, 20);
-    }
-
-    const hasTD = d.task && d.task.includes('【TD】');
+    const d      = JSON.parse(json);
+    const hasTD  = d.task && d.task.includes('【TD】');
     const skipCal = hasTD || !!d.skip;
 
-    let dateValue = null;
-    if (d.date) {
-      const [y, m, day] = d.date.split('-').map(Number);
-      dateValue = new Date(y, m - 1, day);
-    }
+    const newTask = {
+      id:         genId_(),
+      done:       false,
+      priority:   !!d.priority,
+      date:       d.date     || '',
+      time:       d.time     || '',
+      task:       d.task     || '',
+      category:   d.category || '',
+      note:       d.note     || '',
+      eventId:    '',
+      registered: false,
+      skip:       skipCal,
+      autoFlag:   hasTD,
+      createdAt:  new Date().toISOString()
+    };
 
-    let timeValue = null;
-    if (d.time) {
-      const [h, m] = d.time.split(':').map(Number);
-      timeValue = new Date(1899, 11, 30, h, m, 0);
-    }
-
-    [COL.DONE, COL.REGISTER, COL.PRIORITY, COL.SKIP, COL.AUTO_FLAG].forEach(col => {
-      sheet.getRange(newRow, col).insertCheckboxes();
-    });
-
-    sheet.getRange(newRow, COL.DONE).setValue(false);
-    sheet.getRange(newRow, COL.REGISTER).setValue(false);
-    sheet.getRange(newRow, COL.PRIORITY).setValue(!!d.priority);
-    if (dateValue) sheet.getRange(newRow, COL.DATE).setValue(dateValue);
-    if (timeValue) sheet.getRange(newRow, COL.TIME).setValue(timeValue);
-    sheet.getRange(newRow, COL.TASK).setValue(d.task || '');
-    sheet.getRange(newRow, COL.CATEGORY).setValue(d.category || '');
-    sheet.getRange(newRow, COL.NOTE).setValue(d.note || '');
-    sheet.getRange(newRow, COL.SKIP).setValue(skipCal);
-    sheet.getRange(newRow, COL.AUTO_FLAG).setValue(hasTD);
-
-    // 日付・時間あり & 登録スキップOFF → カレンダーに自動登録
+    // 日付・時間あり & 登録スキップOFF → カレンダー自動登録
     let calendarRegistered = false;
-    if (!skipCal && dateValue && d.time && d.task) {
+    if (!skipCal && d.date && d.time && d.task) {
       try {
-        const tz = Session.getScriptTimeZone();
-        const start = new Date(dateValue);
-        start.setHours(4, 0, 0, 0);
-        const end = new Date(dateValue);
-        end.setHours(6, 0, 0, 0);
+        const [y, m, day] = d.date.split('-').map(Number);
+        const start = new Date(y, m - 1, day, 4, 0, 0);
+        const end   = new Date(y, m - 1, day, 6, 0, 0);
         const title = `【${d.time}締切】${d.task}`;
-        const cal = CalendarApp.getCalendarById(CALENDAR_ID);
+        const cal   = CalendarApp.getCalendarById(CALENDAR_ID);
         const event = cal.createEvent(title, start, end, { description: String(d.note || '') });
-        sheet.getRange(newRow, COL.REGISTER).setValue(true);
-        sheet.getRange(newRow, COL.EVENT_ID).setValue(event.getId());
+        newTask.eventId    = event.getId();
+        newTask.registered = true;
         calendarRegistered = true;
-      } catch (_) {}
+      } catch(_) {}
     }
 
-    SpreadsheetApp.flush();
+    const tasks = loadTasks_();
+    tasks.push(newTask);
+    saveTasks_(tasks);
+
     return JSON.stringify({ success: true, calendarRegistered });
-  } catch (e) {
+  } catch(e) {
     return JSON.stringify({ success: false, error: e.toString() });
   }
 }
 
-function completeTask(rowNum) {
+function completeTask(taskId) {
   try {
-    const sheet = getSheet_();
-    sheet.getRange(rowNum, COL.DONE).setValue(true);
+    const tasks = loadTasks_();
+    const idx   = tasks.findIndex(t => t.id === taskId);
+    if (idx === -1) return JSON.stringify({ success: false, error: 'task not found' });
 
-    const eventId = sheet.getRange(rowNum, COL.EVENT_ID).getValue();
-    if (eventId) {
+    // カレンダーイベントを削除
+    if (tasks[idx].eventId) {
       try {
         const cal = CalendarApp.getCalendarById(CALENDAR_ID);
-        const event = cal.getEventById(String(eventId));
-        if (event) event.deleteEvent();
-      } catch (_) {}
-      sheet.getRange(rowNum, COL.EVENT_ID).clearContent();
+        const ev  = cal.getEventById(String(tasks[idx].eventId));
+        if (ev) ev.deleteEvent();
+      } catch(_) {}
+      tasks[idx].eventId = '';
     }
 
-    SpreadsheetApp.flush();
+    tasks[idx].done        = true;
+    tasks[idx].completedAt = new Date().toISOString();
+    saveTasks_(tasks);
+
     return JSON.stringify({ success: true });
-  } catch (e) {
+  } catch(e) {
     return JSON.stringify({ success: false, error: e.toString() });
   }
 }
 
-function registerCalendar(rowNum) {
+function registerCalendar(taskId) {
   try {
-    const sheet = getSheet_();
-    const tz = Session.getScriptTimeZone();
+    const tasks = loadTasks_();
+    const idx   = tasks.findIndex(t => t.id === taskId);
+    if (idx === -1) return JSON.stringify({ success: false, reason: 'not_found' });
 
-    const eventId  = sheet.getRange(rowNum, COL.EVENT_ID).getValue();
-    const skip     = sheet.getRange(rowNum, COL.SKIP).getValue();
-    const dateVal  = sheet.getRange(rowNum, COL.DATE).getValue();
-    const timeVal  = sheet.getRange(rowNum, COL.TIME).getValue();
-    const taskName = sheet.getRange(rowNum, COL.TASK).getValue();
-    const note     = sheet.getRange(rowNum, COL.NOTE).getValue();
+    const t = tasks[idx];
+    if (t.eventId)                     return JSON.stringify({ success: false, reason: 'already_registered' });
+    if (t.skip)                        return JSON.stringify({ success: false, reason: 'skip_enabled' });
+    if (!t.date || !t.time || !t.task) return JSON.stringify({ success: false, reason: 'missing_data' });
 
-    if (eventId)                           return JSON.stringify({ success: false, reason: 'already_registered' });
-    if (skip)                              return JSON.stringify({ success: false, reason: 'skip_enabled' });
-    if (!dateVal || !timeVal || !taskName) return JSON.stringify({ success: false, reason: 'missing_data' });
-
-    const start = new Date(dateVal);
-    start.setHours(4, 0, 0, 0);
-    const end = new Date(dateVal);
-    end.setHours(6, 0, 0, 0);
-
-    const timeText = Utilities.formatDate(new Date(timeVal), tz, 'HH:mm');
-    const title = `【${timeText}締切】${taskName}`;
-
+    const [y, m, day] = t.date.split('-').map(Number);
+    const start = new Date(y, m - 1, day, 4, 0, 0);
+    const end   = new Date(y, m - 1, day, 6, 0, 0);
+    const title = `【${t.time}締切】${t.task}`;
     const cal   = CalendarApp.getCalendarById(CALENDAR_ID);
-    const event = cal.createEvent(title, start, end, { description: String(note || '') });
+    const event = cal.createEvent(title, start, end, { description: String(t.note || '') });
 
-    sheet.getRange(rowNum, COL.REGISTER).setValue(true);
-    sheet.getRange(rowNum, COL.EVENT_ID).setValue(event.getId());
-    SpreadsheetApp.flush();
+    tasks[idx].eventId    = event.getId();
+    tasks[idx].registered = true;
+    saveTasks_(tasks);
 
     return JSON.stringify({ success: true });
-  } catch (e) {
+  } catch(e) {
+    return JSON.stringify({ success: false, error: e.toString() });
+  }
+}
+
+function togglePriority(taskId) {
+  try {
+    const tasks = loadTasks_();
+    const idx   = tasks.findIndex(t => t.id === taskId);
+    if (idx === -1) return JSON.stringify({ success: false, error: 'task not found' });
+
+    tasks[idx].priority = !tasks[idx].priority;
+    saveTasks_(tasks);
+
+    return JSON.stringify({ success: true, value: tasks[idx].priority });
+  } catch(e) {
     return JSON.stringify({ success: false, error: e.toString() });
   }
 }
 
 function updateTask(json) {
   try {
-    const d = JSON.parse(json);
-    const sheet = getSheet_();
+    const d     = JSON.parse(json);
+    const tasks = loadTasks_();
+    const idx   = tasks.findIndex(t => t.id === d.row);
+    if (idx === -1) return JSON.stringify({ success: false, error: 'task not found' });
 
-    if (d.field === 'task') {
-      sheet.getRange(d.row, COL.TASK).setValue(d.value);
-    } else if (d.field === 'note') {
-      sheet.getRange(d.row, COL.NOTE).setValue(d.value);
-    } else if (d.field === 'date') {
-      if (d.value) {
-        const [y, m, day] = d.value.split('-').map(Number);
-        sheet.getRange(d.row, COL.DATE).setValue(new Date(y, m - 1, day));
-      } else {
-        sheet.getRange(d.row, COL.DATE).clearContent();
-      }
-    } else if (d.field === 'time') {
-      if (d.value) {
-        const [h, m] = d.value.split(':').map(Number);
-        sheet.getRange(d.row, COL.TIME).setValue(new Date(1899, 11, 30, h, m, 0));
-      } else {
-        sheet.getRange(d.row, COL.TIME).clearContent();
-      }
-    }
+    if      (d.field === 'task')     tasks[idx].task     = d.value;
+    else if (d.field === 'note')     tasks[idx].note     = d.value;
+    else if (d.field === 'date')     tasks[idx].date     = d.value;
+    else if (d.field === 'time')     tasks[idx].time     = d.value;
+    else if (d.field === 'category') tasks[idx].category = d.value;
 
-    SpreadsheetApp.flush();
+    saveTasks_(tasks);
     return JSON.stringify({ success: true });
-  } catch (e) {
-    return JSON.stringify({ success: false, error: e.toString() });
-  }
-}
-
-function togglePriority(rowNum) {
-  try {
-    const sheet  = getSheet_();
-    const cell   = sheet.getRange(rowNum, COL.PRIORITY);
-    const newVal = !cell.getValue();
-    cell.setValue(newVal);
-    SpreadsheetApp.flush();
-    return JSON.stringify({ success: true, value: newVal });
-  } catch (e) {
+  } catch(e) {
     return JSON.stringify({ success: false, error: e.toString() });
   }
 }
