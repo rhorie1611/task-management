@@ -8,10 +8,9 @@
   <meta name="apple-mobile-web-app-title" content="タスク管理">
   <link rel="apple-touch-icon" href="icon192.png">
   <link rel="icon" type="image/png" href="icon192.png">
-  <meta name="theme-color" content="#4f46e5">
+  <meta name="theme-color" content="#0d9488">
   <title>タスク管理</title>
   <script>
-    // GitHub Pages では GAS のラッパーがないので viewport はそのまま正常に動作する
     if (screen.width >= 769) document.documentElement.classList.add('is-desktop');
   </script>
   <style>
@@ -22,7 +21,7 @@
       --bg:      #f3f4f6;
       --white:   #ffffff;
       --border:  #e5e7eb;
-      --primary: #4f46e5;
+      --primary: #0d9488;
       --r:       10px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -62,19 +61,19 @@
     .group.urgent .group-hdr { background: #fff1f2; }
     .group.today  .group-hdr { background: #fff7ed; }
     .group.week   .group-hdr { background: #fffbeb; }
-    .group.later  .group-hdr { background: #f0f9ff; }
+    .group.later  .group-hdr { background: #f0fdfa; }
     .group.nodate .group-hdr { background: #f9fafb; }
     .g-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .group.urgent .g-dot { background: #f43f5e; }
     .group.today  .g-dot { background: #f97316; }
     .group.week   .g-dot { background: #f59e0b; }
-    .group.later  .g-dot { background: #6366f1; }
+    .group.later  .g-dot { background: #0d9488; }
     .group.nodate .g-dot { background: #9ca3af; }
     .g-name { font-size: 13px; font-weight: 700; flex: 1; }
     .group.urgent .g-name { color: #be123c; }
     .group.today  .g-name { color: #c2410c; }
     .group.week   .g-name { color: #92400e; }
-    .group.later  .g-name { color: #312e81; }
+    .group.later  .g-name { color: #134e4a; }
     .g-count { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--bg); padding: 1px 8px; border-radius: 10px; }
     .g-chev { font-size: 10px; color: var(--light); transition: transform .2s; }
     .g-chev.open { transform: rotate(90deg); }
@@ -86,33 +85,28 @@
     .task-row:last-child { border-bottom: none; }
     .task-row.done-anim { opacity: 0; transform: translateX(30px); }
 
-    /* デフォルト = モバイル: 縦積み */
     .task-body { display: flex; flex-direction: column; }
     .task-top  { display: flex; align-items: flex-start; gap: 6px; padding: 10px 10px 8px; }
 
-    /* デスクトップのみ: 横並び */
     html.is-desktop .task-body { flex-direction: row; align-items: stretch; }
     html.is-desktop .task-top  { flex: 1; border-right: 1px solid var(--border); padding: 10px 12px; }
     html.is-desktop .task-note { display: flex !important; flex: 1.4; border-top: none; border-left: none; padding: 8px 12px; }
     html.is-desktop .note-toggle { display: none; }
     html.is-desktop .btn-done { height: 32px; padding: 0 12px; font-size: 12px; }
 
-    /* 星ボタン */
     .star-btn { width: 32px; height: 32px; border: none; background: none; border-radius: 6px; font-size: 16px; cursor: pointer; color: #d1d5db; touch-action: manipulation; flex-shrink: 0; margin-top: 1px; }
     .star-btn:hover { background: var(--bg); }
     .star-btn.active { color: #f59e0b; }
 
-    /* タスク情報 */
     .task-info-col { flex: 1; min-width: 0; }
     .task-name-edit { font-size: 15px; font-weight: 600; line-height: 1.45; word-break: break-all; outline: none; cursor: text; border-radius: 4px; padding: 1px 3px; margin: -1px -3px; min-height: 22px; }
-    .task-name-edit:focus { background: #f0f9ff; }
+    .task-name-edit:focus { background: #f0fdfa; }
     .task-name-edit.priority { color: #92400e; }
 
-    /* メタ行 */
     .task-sub { display: flex; align-items: center; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
     .dl-badge { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; cursor: pointer; transition: opacity .15s; white-space: nowrap; }
     .dl-badge:hover { opacity: .75; }
-    .dl-badge.normal  { background: #eff6ff; color: #1d4ed8; }
+    .dl-badge.normal  { background: #f0fdfa; color: #0f766e; }
     .dl-badge.overdue { background: #fff1f2; color: #e11d48; }
     .dl-badge.today   { background: #fff7ed; color: #c2410c; }
     .add-meta-btn { font-size: 11px; color: var(--light); cursor: pointer; white-space: nowrap; }
@@ -126,23 +120,19 @@
     .cat-武田 { background: #d1fae5; color: #065f46; }
     .cat-個人 { background: #fce7f3; color: #9d174d; }
 
-    /* カレンダーボタン */
     .btn-cal { height: 24px; padding: 0 8px; border: 1.5px solid var(--border); border-radius: 5px; background: var(--white); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; touch-action: manipulation; transition: all .1s; }
     .btn-cal:hover { border-color: #9ca3af; color: var(--text); }
     .btn-cal:disabled { opacity: .4; cursor: not-allowed; }
-    .btn-cal.cal-reg { border-color: #bbf7d0; color: #166534; background: #f0fdf4; }
+    .btn-cal.cal-reg { border-color: #99f6e4; color: #0f766e; background: #f0fdfa; }
 
-    /* メモトグル */
     .note-toggle { height: 24px; padding: 0 7px; border: 1.5px solid var(--border); border-radius: 5px; background: var(--white); font-size: 12px; color: var(--muted); cursor: pointer; touch-action: manipulation; transition: all .1s; }
-    .note-toggle.has-note { border-color: #c7d2fe; color: #4f46e5; background: #eef2ff; }
+    .note-toggle.has-note { border-color: #99f6e4; color: #0d9488; background: #f0fdfa; }
 
-    /* 完了ボタン */
     .btn-done { flex-shrink: 0; height: 36px; padding: 0 14px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--white); font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; touch-action: manipulation; transition: all .1s; }
     .btn-done:hover { border-color: #9ca3af; color: var(--text); }
     .btn-done:active { transform: scale(.95); }
     .btn-done:disabled { opacity: .4; cursor: not-allowed; }
 
-    /* メモエリア — モバイルは折りたたみ */
     .task-note { display: none; flex-direction: column; padding: 6px 12px 10px 44px; border-top: 1px solid var(--border); }
     .task-note.open { display: flex; }
 
@@ -150,7 +140,7 @@
     .note-toolbar { display: none; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 3px 5px; gap: 1px; margin-bottom: 6px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
     .note-toolbar::-webkit-scrollbar { display: none; }
     .note-toolbar.show { display: flex; }
-    .tb-btn { width: 28px; height: 26px; display: flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 4px; cursor: pointer; color: var(--muted); font-size: 13px; transition: background .12s, color .12s; flex-shrink: 0; position: relative; }
+    .tb-btn { width: 28px; height: 26px; display: flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 4px; cursor: pointer; color: var(--muted); font-size: 13px; transition: background .12s, color .12s; flex-shrink: 0; }
     .tb-btn:hover { background: var(--border); color: var(--text); }
     .tb-bold   { font-weight: 800; font-size: 14px; }
     .tb-italic { font-style: italic; font-size: 14px; }
@@ -160,9 +150,16 @@
     .note-content { flex: 1; min-height: 28px; outline: none; font-size: 13px; color: var(--muted); line-height: 1.6; cursor: text; word-break: break-word; }
     .note-content:focus { color: var(--text); }
     .note-content ul, .note-content ol { padding-left: 18px; margin: 2px 0; }
-    .note-content blockquote { border-left: 3px solid #4f46e5; padding-left: 10px; margin: 3px 0; color: var(--muted); font-style: italic; }
+    .note-content blockquote { border-left: 3px solid #0d9488; padding-left: 10px; margin: 3px 0; color: var(--muted); font-style: italic; }
     .note-content pre { background: #f3f4f6; border: 1px solid var(--border); border-radius: 5px; padding: 6px 10px; margin: 3px 0; font-family: 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; }
     .note-content.is-empty:before { content: 'メモを追加...'; color: #d1d5db; pointer-events: none; }
+
+    /* モーダル内ノートエディタ */
+    .note-editor-wrap { border: 1.5px solid var(--border); border-radius: var(--r); overflow: hidden; transition: border-color .2s; }
+    .note-editor-wrap:focus-within { border-color: var(--primary); }
+    .note-editor-wrap .note-toolbar { display: flex; border: none; border-radius: 0; border-bottom: 1px solid var(--border); margin-bottom: 0; background: #fafafa; }
+    .form-note-content { min-height: 80px; padding: 10px 13px; outline: none; font-size: 15px; line-height: 1.6; color: var(--text); }
+    #fNoteContent.is-empty:before { content: 'メモ（カレンダーの説明欄にも入ります）'; }
 
     /* Loading / Empty */
     .loading, .empty { background: var(--white); border-radius: var(--r); border: 1px solid var(--border); text-align: center; padding: 48px 20px; color: var(--muted); }
@@ -170,9 +167,17 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .empty-icon { font-size: 36px; margin-bottom: 8px; }
 
-    /* FAB */
-    .fab { position: fixed; bottom: 24px; right: 16px; height: 48px; padding: 0 20px; border-radius: 24px; background: var(--text); color: var(--white); border: none; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.18); display: flex; align-items: center; gap: 6px; z-index: 200; touch-action: manipulation; }
-    .fab:active { transform: scale(.96); }
+    /* FAB — 円形 */
+    .fab {
+      position: fixed; bottom: 24px; right: 20px;
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--text); color: var(--white); border: none;
+      font-size: 32px; font-weight: 300; line-height: 1;
+      cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,.22);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; touch-action: manipulation;
+    }
+    .fab:active { transform: scale(.93); }
 
     /* モーダル共通 */
     .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 300; align-items: flex-end; }
@@ -198,24 +203,28 @@
     .cat-pick-btn[data-cat="DIK"].active  { background: #5b21b6; }
     .cat-pick-btn[data-cat="武田"].active { background: #065f46; }
     .cat-pick-btn[data-cat="個人"].active { background: #9d174d; }
-    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; background: var(--bg); border-radius: var(--r); margin-bottom: 8px; }
-    .toggle-label { font-size: 14px; font-weight: 600; }
-    .switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; inset: 0; background: #d1d5db; border-radius: 26px; cursor: pointer; transition: background .2s; }
-    .slider:before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; bottom: 3px; background: var(--white); border-radius: 50%; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
-    .switch input:checked + .slider { background: var(--text); }
-    .switch input:checked + .slider:before { transform: translateX(18px); }
-    .btn-submit { width: 100%; padding: 14px; margin-top: 16px; background: var(--text); color: var(--white); border: none; border-radius: var(--r); font-size: 15px; font-weight: 700; cursor: pointer; touch-action: manipulation; transition: opacity .15s; }
+
+    /* トグルピルボタン */
+    .toggle-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .toggle-pill-btn {
+      padding: 14px 10px; border: 1.5px solid var(--border); border-radius: var(--r);
+      background: var(--white); font-size: 13px; font-weight: 600; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      color: var(--muted); transition: all .15s; touch-action: manipulation; line-height: 1.3;
+    }
+    .toggle-pill-btn .tp-icon { font-size: 22px; }
+    .toggle-pill-btn:active { transform: scale(.96); }
+    .toggle-pill-btn.active { background: var(--text); color: var(--white); border-color: var(--text); }
+
+    .btn-submit { width: 100%; padding: 14px; margin-top: 6px; background: var(--text); color: var(--white); border: none; border-radius: var(--r); font-size: 15px; font-weight: 700; cursor: pointer; touch-action: manipulation; transition: opacity .15s; }
     .btn-submit:active { opacity: .8; }
     .btn-submit:disabled { opacity: .4; cursor: not-allowed; }
 
     .toast { position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%) translateY(10px); background: rgba(17,24,39,.9); color: var(--white); padding: 9px 20px; border-radius: 22px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .2s, transform .2s; z-index: 500; white-space: nowrap; pointer-events: none; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-    /* セットアップモーダル */
     .setup-step { background: var(--bg); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; font-size: 13px; line-height: 1.6; }
-    .setup-step code { background: #e0e7ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 12px; }
+    .setup-step code { background: #ccfbf1; color: #134e4a; padding: 1px 5px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -242,7 +251,7 @@
   <div class="loading"><div class="spinner"></div>読み込み中...</div>
 </div>
 
-<button class="fab" onclick="openModal()"><span style="font-size:20px;font-weight:300">+</span> タスクを追加</button>
+<button class="fab" onclick="openModal()">+</button>
 
 <!-- タスク追加モーダル -->
 <div class="overlay" id="overlay" onclick="onOverlayClick(event)">
@@ -275,16 +284,33 @@
     </div>
     <div class="form-group">
       <label class="form-label">備考</label>
-      <textarea id="fNote" class="form-ctrl" rows="3" placeholder="メモ（カレンダーの説明欄にも入ります）"></textarea>
+      <div class="note-editor-wrap">
+        <div class="note-toolbar" id="fNoteToolbar">
+          <button class="tb-btn tb-bold" onmousedown="event.preventDefault();fmtModalNote('bold')">B</button>
+          <button class="tb-btn tb-italic" onmousedown="event.preventDefault();fmtModalNote('italic')">I</button>
+          <button class="tb-btn tb-strike" onmousedown="event.preventDefault();fmtModalNote('strikeThrough')">S</button>
+          <span class="tb-sep"></span>
+          <button class="tb-btn" onmousedown="event.preventDefault();fmtModalNote('insertUnorderedList')"><span style="font-size:15px;line-height:1">≡</span></button>
+          <button class="tb-btn" onmousedown="event.preventDefault();fmtModalNote('insertOrderedList')"><span style="font-size:11px;font-weight:700">1≡</span></button>
+          <span class="tb-sep"></span>
+          <button class="tb-btn" onmousedown="event.preventDefault();fmtModalBlock_('blockquote')"><span style="font-size:14px">❝</span></button>
+          <button class="tb-btn tb-code" onmousedown="event.preventDefault();fmtModalBlock_('pre')">&lt;/&gt;</button>
+        </div>
+        <div class="note-content form-note-content is-empty" contenteditable="true" id="fNoteContent"
+          oninput="refreshPlaceholder(this)"
+          onkeydown="modalNoteKeyDown(event)"></div>
+      </div>
     </div>
-    <div class="toggle-row">
-      <span class="toggle-label">⭐ 優先タスク</span>
-      <label class="switch"><input type="checkbox" id="fPriority"><span class="slider"></span></label>
+    <div class="toggle-pair">
+      <button type="button" id="fPriorityBtn" class="toggle-pill-btn" onclick="togglePillBtn('fPriorityBtn','fPriority')">
+        <span class="tp-icon">⭐</span><span>優先タスク</span>
+      </button>
+      <button type="button" id="fSkipBtn" class="toggle-pill-btn" onclick="togglePillBtn('fSkipBtn','fSkip')">
+        <span class="tp-icon">🚫</span><span>登録しない</span>
+      </button>
     </div>
-    <div class="toggle-row">
-      <span class="toggle-label">🚫 カレンダー登録しない</span>
-      <label class="switch"><input type="checkbox" id="fSkip"><span class="slider"></span></label>
-    </div>
+    <input type="checkbox" id="fPriority" style="display:none">
+    <input type="checkbox" id="fSkip" style="display:none">
     <button class="btn-submit" id="submitBtn" onclick="submitTask()">追加する</button>
   </div>
 </div>
@@ -436,7 +462,6 @@
     if(!html) html='<div class="empty"><div class="empty-icon">✅</div><p>'+(currentFilter==='全て'?'タスクがありません':currentFilter+'のタスクはありません')+'</p></div>';
     document.getElementById('content').innerHTML = html;
 
-    // contenteditable を JS で安全にセット
     filtered.forEach(function(t){
       var tn=document.getElementById('tn-'+t.row);
       if(tn){ tn.textContent=t.task; taskOrig[t.row]=t.task; }
@@ -596,7 +621,7 @@
   }
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // リッチテキストノート
+  // リッチテキストノート（タスク行）
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   function noteKeyDown(e,row) {
     if(e.key==='Tab'){e.preventDefault();e.stopPropagation();document.execCommand(e.shiftKey?'outdent':'indent',false,null);return;}
@@ -636,6 +661,33 @@
   function refreshPlaceholder(el){if(!el.textContent.trim()&&!el.querySelector('img'))el.classList.add('is-empty');else el.classList.remove('is-empty');}
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // リッチテキストノート（追加モーダル）
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function fmtModalNote(cmd){document.execCommand(cmd,false,null);}
+  function fmtModalBlock_(tag){
+    var sel=window.getSelection();if(!sel||!sel.anchorNode)return;
+    var node=sel.anchorNode;while(node&&node.nodeType!==1)node=node.parentNode;
+    while(node){
+      if(node.id==='fNoteContent')break;
+      if(node.tagName&&node.tagName.toLowerCase()===tag){var frag=document.createDocumentFragment();while(node.firstChild)frag.appendChild(node.firstChild);node.parentNode.replaceChild(frag,node);return;}
+      node=node.parentNode;
+    }
+    document.execCommand('formatBlock',false,tag);
+  }
+  function modalNoteKeyDown(e){
+    if(e.key==='Tab'){e.preventDefault();document.execCommand(e.shiftKey?'outdent':'indent',false,null);return;}
+    if(e.key===' '||e.key==='Spacebar'){
+      var sel=window.getSelection();if(!sel||!sel.rangeCount||!sel.isCollapsed)return;
+      var range=sel.getRangeAt(0),node=range.startContainer;if(node.nodeType!==3)return;
+      var tb=node.textContent.slice(0,range.startOffset),mdCmd=null;
+      if(tb==='>'){mdCmd=function(){document.execCommand('formatBlock',false,'blockquote');};}
+      else if(tb==='-'||tb==='*'){mdCmd=function(){document.execCommand('insertUnorderedList');};}
+      else if(/^\d+\.$/.test(tb)){mdCmd=function(){document.execCommand('insertOrderedList');};}
+      if(mdCmd){e.preventDefault();for(var i=0;i<tb.length;i++)document.execCommand('delete');mdCmd();}
+    }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // サーバー保存
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   function pushField(row,field,value) {
@@ -661,12 +713,19 @@
     document.querySelectorAll('.cat-pick-btn').forEach(function(b){b.classList.remove('active');});
     el.classList.add('active');
   }
+  function togglePillBtn(btnId,chkId){
+    var btn=document.getElementById(btnId),chk=document.getElementById(chkId);
+    btn.classList.toggle('active');
+    if(chk)chk.checked=btn.classList.contains('active');
+  }
   function submitTask() {
     var task=document.getElementById('fTask').value.trim();
     if(!task){toast('タスク名を入力してください');document.getElementById('fTask').focus();return;}
     var btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent='追加中...';
+    var fnc=document.getElementById('fNoteContent');
+    var noteVal=fnc?fnc.innerHTML:'';if(/^(<br\s*\/?>|\s)*$/i.test(noteVal))noteVal='';
     var payload={task:task,date:document.getElementById('fDate').value,time:document.getElementById('fTime').value,
-      category:fSelectedCat,note:document.getElementById('fNote').value,
+      category:fSelectedCat,note:noteVal,
       priority:document.getElementById('fPriority').checked,skip:document.getElementById('fSkip').checked};
     gasCall({ action:'addTask', data:JSON.stringify(payload) },
       function(res){ btn.disabled=false;btn.textContent='追加する';if(res.success){closeModal();resetForm();loadTasks();toast(res.calendarRegistered?'タスクとカレンダーを追加しました':'タスクを追加しました');}else{toast(res.error||'エラーが発生しました');} },
@@ -674,10 +733,17 @@
     );
   }
   function resetForm(){
-    document.getElementById('fTask').value=document.getElementById('fNote').value='';
-    document.getElementById('fDate').value=todayISO();document.getElementById('fTime').value='23:59';
-    document.getElementById('fPriority').checked=document.getElementById('fSkip').checked=false;
-    fSelectedCat='';document.querySelectorAll('.cat-pick-btn').forEach(function(b){b.classList.remove('active');});
+    document.getElementById('fTask').value='';
+    var fnc=document.getElementById('fNoteContent');
+    if(fnc){fnc.innerHTML='';refreshPlaceholder(fnc);}
+    document.getElementById('fDate').value=todayISO();
+    document.getElementById('fTime').value='23:59';
+    document.getElementById('fPriority').checked=false;
+    document.getElementById('fSkip').checked=false;
+    var pb=document.getElementById('fPriorityBtn'),sb=document.getElementById('fSkipBtn');
+    if(pb)pb.classList.remove('active');if(sb)sb.classList.remove('active');
+    fSelectedCat='';
+    document.querySelectorAll('.cat-pick-btn').forEach(function(b){b.classList.remove('active');});
     document.querySelector('.cat-pick-btn[data-cat=""]').classList.add('active');
   }
 
