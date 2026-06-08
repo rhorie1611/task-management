@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(\\(Get-Content 'C:\\\\Users\\\\RyoHo\\\\claude-workspace\\\\01_personal\\\\task-management\\\\index.html' -Encoding UTF8\\)[88..120])"
+    ]
+  }
+}
