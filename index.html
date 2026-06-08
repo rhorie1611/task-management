@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="タスク管理">
+  <link rel="apple-touch-icon" href="icon192.png">
+  <link rel="icon" type="image/png" href="icon192.png">
+  <meta name="theme-color" content="#4f46e5">
+  <title>タスク管理</title>
+  <script>
+    // GitHub Pages では GAS のラッパーがないので viewport はそのまま正常に動作する
+    if (screen.width >= 769) document.documentElement.classList.add('is-desktop');
+  </script>
+  <style>
+    :root {
+      --text:    #111827;
+      --muted:   #6b7280;
+      --light:   #9ca3af;
+      --bg:      #f3f4f6;
+      --white:   #ffffff;
+      --border:  #e5e7eb;
+      --primary: #4f46e5;
+      --r:       10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 80px;
+    }
+
+    /* ── ヘッダー ── */
+    .header {
+      background: var(--white); border-bottom: 1px solid var(--border);
+      padding: 50px 16px 0; position: sticky; top: 0; z-index: 100;
+    }
+    .header-top { display: flex; align-items: baseline; gap: 8px; }
+    h1 { font-size: 24px; font-weight: 800; letter-spacing: -.5px; }
+    .btn-settings {
+      margin-left: auto; width: 32px; height: 32px; border: none; background: none;
+      font-size: 18px; cursor: pointer; color: var(--light); border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-settings:hover { background: var(--bg); color: var(--muted); }
+    .header-meta { font-size: 12px; color: var(--muted); margin: 3px 0 12px; display: flex; gap: 8px; align-items: center; }
+    .sep { color: var(--light); }
+    .filter-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 12px; align-items: center; }
+    .filter-row::-webkit-scrollbar { display: none; }
+    .pill { padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; border: 1.5px solid var(--border); background: var(--white); color: var(--muted); transition: all .15s; touch-action: manipulation; }
+    .pill.active { background: var(--text); color: var(--white); border-color: var(--text); }
+    .btn-refresh { margin-left: auto; padding: 5px 10px; border-radius: 20px; font-size: 14px; border: 1.5px solid var(--border); background: var(--white); color: var(--muted); cursor: pointer; touch-action: manipulation; flex-shrink: 0; }
+
+    /* ── コンテンツ ── */
+    .content { padding: 12px 12px 0; display: flex; flex-direction: column; gap: 8px; }
+
+    /* ── グループ ── */
+    .group { background: var(--white); border-radius: var(--r); border: 1px solid var(--border); overflow: hidden; }
+    .group-hdr { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; user-select: none; border-bottom: 1px solid var(--border); }
+    .group-hdr:hover { background: #fafafa; }
+    .group.urgent .group-hdr { background: #fff1f2; }
+    .group.today  .group-hdr { background: #fff7ed; }
+    .group.week   .group-hdr { background: #fffbeb; }
+    .group.later  .group-hdr { background: #f0f9ff; }
+    .group.nodate .group-hdr { background: #f9fafb; }
+    .g-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .group.urgent .g-dot { background: #f43f5e; }
+    .group.today  .g-dot { background: #f97316; }
+    .group.week   .g-dot { background: #f59e0b; }
+    .group.later  .g-dot { background: #6366f1; }
+    .group.nodate .g-dot { background: #9ca3af; }
+    .g-name { font-size: 13px; font-weight: 700; flex: 1; }
+    .group.urgent .g-name { color: #be123c; }
+    .group.today  .g-name { color: #c2410c; }
+    .group.week   .g-name { color: #92400e; }
+    .group.later  .g-name { color: #312e81; }
+    .g-count { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--bg); padding: 1px 8px; border-radius: 10px; }
+    .g-chev { font-size: 10px; color: var(--light); transition: transform .2s; }
+    .g-chev.open { transform: rotate(90deg); }
+    .group-body { display: none; }
+    .group-body.open { display: block; }
+
+    /* ━━━ タスク行 — モバイルファースト ━━━ */
+    .task-row { border-bottom: 1px solid var(--border); transition: opacity .25s, transform .25s; }
+    .task-row:last-child { border-bottom: none; }
+    .task-row.done-anim { opacity: 0; transform: translateX(30px); }
+
+    /* デフォルト = モバイル: 縦積み */
+    .task-body { display: flex; flex-direction: column; }
+    .task-top  { display: flex; align-items: flex-start; gap: 6px; padding: 10px 10px 8px; }
+
+    /* デスクトップのみ: 横並び */
+    html.is-desktop .task-body { flex-direction: row; align-items: stretch; }
+    html.is-desktop .task-top  { flex: 1; border-right: 1px solid var(--border); padding: 10px 12px; }
+    html.is-desktop .task-note { display: flex !important; flex: 1.4; border-top: none; border-left: none; padding: 8px 12px; }
+    html.is-desktop .note-toggle { display: none; }
+    html.is-desktop .btn-done { height: 32px; padding: 0 12px; font-size: 12px; }
+
+    /* 星ボタン */
+    .star-btn { width: 32px; height: 32px; border: none; background: none; border-radius: 6px; font-size: 16px; cursor: pointer; color: #d1d5db; touch-action: manipulation; flex-shrink: 0; margin-top: 1px; }
+    .star-btn:hover { background: var(--bg); }
+    .star-btn.active { color: #f59e0b; }
+
+    /* タスク情報 */
+    .task-info-col { flex: 1; min-width: 0; }
+    .task-name-edit { font-size: 15px; font-weight: 600; line-height: 1.45; word-break: break-all; outline: none; cursor: text; border-radius: 4px; padding: 1px 3px; margin: -1px -3px; min-height: 22px; }
+    .task-name-edit:focus { background: #f0f9ff; }
+    .task-name-edit.priority { color: #92400e; }
+
+    /* メタ行 */
+    .task-sub { display: flex; align-items: center; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+    .dl-badge { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; cursor: pointer; transition: opacity .15s; white-space: nowrap; }
+    .dl-badge:hover { opacity: .75; }
+    .dl-badge.normal  { background: #eff6ff; color: #1d4ed8; }
+    .dl-badge.overdue { background: #fff1f2; color: #e11d48; }
+    .dl-badge.today   { background: #fff7ed; color: #c2410c; }
+    .add-meta-btn { font-size: 11px; color: var(--light); cursor: pointer; white-space: nowrap; }
+    .add-meta-btn:hover { color: var(--muted); }
+    .inline-input { font-size: 11px; padding: 2px 6px; border: 1.5px solid var(--primary); border-radius: 5px; outline: none; background: var(--white); font-family: inherit; color: var(--text); }
+    .dl-time { font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+    .dl-time:hover { color: var(--text); }
+    .cat-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 5px; white-space: nowrap; }
+    .cat-大学 { background: #dbeafe; color: #1e40af; }
+    .cat-DIK  { background: #ede9fe; color: #5b21b6; }
+    .cat-武田 { background: #d1fae5; color: #065f46; }
+    .cat-個人 { background: #fce7f3; color: #9d174d; }
+
+    /* カレンダーボタン */
+    .btn-cal { height: 24px; padding: 0 8px; border: 1.5px solid var(--border); border-radius: 5px; background: var(--white); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; touch-action: manipulation; transition: all .1s; }
+    .btn-cal:hover { border-color: #9ca3af; color: var(--text); }
+    .btn-cal:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-cal.cal-reg { border-color: #bbf7d0; color: #166534; background: #f0fdf4; }
+
+    /* メモトグル */
+    .note-toggle { height: 24px; padding: 0 7px; border: 1.5px solid var(--border); border-radius: 5px; background: var(--white); font-size: 12px; color: var(--muted); cursor: pointer; touch-action: manipulation; transition: all .1s; }
+    .note-toggle.has-note { border-color: #c7d2fe; color: #4f46e5; background: #eef2ff; }
+
+    /* 完了ボタン */
+    .btn-done { flex-shrink: 0; height: 36px; padding: 0 14px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--white); font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; touch-action: manipulation; transition: all .1s; }
+    .btn-done:hover { border-color: #9ca3af; color: var(--text); }
+    .btn-done:active { transform: scale(.95); }
+    .btn-done:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* メモエリア — モバイルは折りたたみ */
+    .task-note { display: none; flex-direction: column; padding: 6px 12px 10px 44px; border-top: 1px solid var(--border); }
+    .task-note.open { display: flex; }
+
+    /* リッチテキストエディター */
+    .note-toolbar { display: none; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 3px 5px; gap: 1px; margin-bottom: 6px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+    .note-toolbar::-webkit-scrollbar { display: none; }
+    .note-toolbar.show { display: flex; }
+    .tb-btn { width: 28px; height: 26px; display: flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 4px; cursor: pointer; color: var(--muted); font-size: 13px; transition: background .12s, color .12s; flex-shrink: 0; position: relative; }
+    .tb-btn:hover { background: var(--border); color: var(--text); }
+    .tb-bold   { font-weight: 800; font-size: 14px; }
+    .tb-italic { font-style: italic; font-size: 14px; }
+    .tb-strike { text-decoration: line-through; }
+    .tb-code   { font-family: 'Courier New', monospace; font-size: 12px; }
+    .tb-sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; flex-shrink: 0; }
+    .note-content { flex: 1; min-height: 28px; outline: none; font-size: 13px; color: var(--muted); line-height: 1.6; cursor: text; word-break: break-word; }
+    .note-content:focus { color: var(--text); }
+    .note-content ul, .note-content ol { padding-left: 18px; margin: 2px 0; }
+    .note-content blockquote { border-left: 3px solid #4f46e5; padding-left: 10px; margin: 3px 0; color: var(--muted); font-style: italic; }
+    .note-content pre { background: #f3f4f6; border: 1px solid var(--border); border-radius: 5px; padding: 6px 10px; margin: 3px 0; font-family: 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; }
+    .note-content.is-empty:before { content: 'メモを追加...'; color: #d1d5db; pointer-events: none; }
+
+    /* Loading / Empty */
+    .loading, .empty { background: var(--white); border-radius: var(--r); border: 1px solid var(--border); text-align: center; padding: 48px 20px; color: var(--muted); }
+    .spinner { width: 28px; height: 28px; border: 2.5px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-icon { font-size: 36px; margin-bottom: 8px; }
+
+    /* FAB */
+    .fab { position: fixed; bottom: 24px; right: 16px; height: 48px; padding: 0 20px; border-radius: 24px; background: var(--text); color: var(--white); border: none; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.18); display: flex; align-items: center; gap: 6px; z-index: 200; touch-action: manipulation; }
+    .fab:active { transform: scale(.96); }
+
+    /* モーダル共通 */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 300; align-items: flex-end; }
+    .overlay.open { display: flex; }
+    .modal { background: var(--white); border-radius: 20px 20px 0 0; padding: 14px 20px 48px; width: 100%; max-height: 92vh; overflow-y: auto; animation: slideUp .28s cubic-bezier(.32,1,.56,1); }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
+    .modal-title  { font-size: 17px; font-weight: 800; margin-bottom: 18px; }
+    .modal-desc { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.6; }
+
+    /* フォーム */
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 6px; }
+    .form-ctrl { width: 100%; padding: 11px 13px; border: 1.5px solid var(--border); border-radius: var(--r); font-size: 15px; font-family: inherit; outline: none; -webkit-appearance: none; color: var(--text); background: var(--white); transition: border-color .2s; }
+    .form-ctrl:focus { border-color: var(--primary); }
+    textarea.form-ctrl { resize: none; line-height: 1.5; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .cat-pick { display: flex; gap: 7px; flex-wrap: wrap; }
+    .cat-pick-btn { padding: 7px 14px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 13px; font-weight: 700; cursor: pointer; background: var(--white); color: var(--muted); touch-action: manipulation; transition: all .15s; }
+    .cat-pick-btn.active { border-color: transparent; color: var(--white); }
+    .cat-pick-btn[data-cat=""].active    { background: var(--text); }
+    .cat-pick-btn[data-cat="大学"].active { background: #1e40af; }
+    .cat-pick-btn[data-cat="DIK"].active  { background: #5b21b6; }
+    .cat-pick-btn[data-cat="武田"].active { background: #065f46; }
+    .cat-pick-btn[data-cat="個人"].active { background: #9d174d; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; background: var(--bg); border-radius: var(--r); margin-bottom: 8px; }
+    .toggle-label { font-size: 14px; font-weight: 600; }
+    .switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; inset: 0; background: #d1d5db; border-radius: 26px; cursor: pointer; transition: background .2s; }
+    .slider:before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; bottom: 3px; background: var(--white); border-radius: 50%; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+    .switch input:checked + .slider { background: var(--text); }
+    .switch input:checked + .slider:before { transform: translateX(18px); }
+    .btn-submit { width: 100%; padding: 14px; margin-top: 16px; background: var(--text); color: var(--white); border: none; border-radius: var(--r); font-size: 15px; font-weight: 700; cursor: pointer; touch-action: manipulation; transition: opacity .15s; }
+    .btn-submit:active { opacity: .8; }
+    .btn-submit:disabled { opacity: .4; cursor: not-allowed; }
+
+    .toast { position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%) translateY(10px); background: rgba(17,24,39,.9); color: var(--white); padding: 9px 20px; border-radius: 22px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .2s, transform .2s; z-index: 500; white-space: nowrap; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* セットアップモーダル */
+    .setup-step { background: var(--bg); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; font-size: 13px; line-height: 1.6; }
+    .setup-step code { background: #e0e7ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <h1>タスク管理</h1>
+    <button class="btn-settings" onclick="openSetup()" title="GAS URL設定">⚙</button>
+  </div>
+  <div class="header-meta">
+    <span id="hDate"></span><span class="sep">·</span><span id="hCount">...</span>
+  </div>
+  <div class="filter-row">
+    <button class="pill active" onclick="filterBy('全て',this)">すべて</button>
+    <button class="pill" onclick="filterBy('大学',this)">大学</button>
+    <button class="pill" onclick="filterBy('DIK',this)">DIK</button>
+    <button class="pill" onclick="filterBy('武田',this)">武田</button>
+    <button class="pill" onclick="filterBy('個人',this)">個人</button>
+    <button class="btn-refresh" onclick="loadTasks()">↻</button>
+  </div>
+</div>
+
+<div class="content" id="content">
+  <div class="loading"><div class="spinner"></div>読み込み中...</div>
+</div>
+
+<button class="fab" onclick="openModal()"><span style="font-size:20px;font-weight:300">+</span> タスクを追加</button>
+
+<!-- タスク追加モーダル -->
+<div class="overlay" id="overlay" onclick="onOverlayClick(event)">
+  <div class="modal" id="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">タスクを追加</div>
+    <div class="form-group">
+      <label class="form-label">タスク名 *</label>
+      <input id="fTask" type="text" class="form-ctrl" placeholder="例：情報と社会｜中間レポート作成" onkeydown="formKeyDown(event)">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">日付</label>
+        <input id="fDate" type="date" class="form-ctrl">
+      </div>
+      <div class="form-group">
+        <label class="form-label">締切時間</label>
+        <input id="fTime" type="time" class="form-ctrl" value="23:59">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">カテゴリー</label>
+      <div class="cat-pick">
+        <button class="cat-pick-btn active" data-cat="" onclick="selectCat(this)">なし</button>
+        <button class="cat-pick-btn" data-cat="大学" onclick="selectCat(this)">大学</button>
+        <button class="cat-pick-btn" data-cat="DIK" onclick="selectCat(this)">DIK</button>
+        <button class="cat-pick-btn" data-cat="武田" onclick="selectCat(this)">武田</button>
+        <button class="cat-pick-btn" data-cat="個人" onclick="selectCat(this)">個人</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">備考</label>
+      <textarea id="fNote" class="form-ctrl" rows="3" placeholder="メモ（カレンダーの説明欄にも入ります）"></textarea>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">⭐ 優先タスク</span>
+      <label class="switch"><input type="checkbox" id="fPriority"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">🚫 カレンダー登録しない</span>
+      <label class="switch"><input type="checkbox" id="fSkip"><span class="slider"></span></label>
+    </div>
+    <button class="btn-submit" id="submitBtn" onclick="submitTask()">追加する</button>
+  </div>
+</div>
+
+<!-- GAS URL設定モーダル -->
+<div class="overlay" id="setup-overlay" onclick="onSetupOverlayClick(event)">
+  <div class="modal" id="setup-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚙ GAS URL 設定</div>
+    <p class="modal-desc">Google Apps Script の Web App URL を入力してください。<br>一度設定すればこのデバイスに保存されます。</p>
+    <div class="setup-step">
+      1. GAS エディタを開く<br>
+      2. <code>デプロイ</code> → <code>デプロイを管理</code><br>
+      3. 既存デプロイの <code>URL</code> をコピー<br>
+      4. 下に貼り付けて保存
+    </div>
+    <div class="form-group">
+      <label class="form-label">Web App URL</label>
+      <input id="gasUrlInput" type="url" class="form-ctrl"
+        placeholder="https://script.google.com/macros/s/...">
+    </div>
+    <button class="btn-submit" onclick="saveSetup()">保存して開始</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // GAS URL 管理
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  var GAS_KEY = 'task_mgmt_gas_url';
+  function getGasUrl() { return localStorage.getItem(GAS_KEY) || ''; }
+
+  function gasCall(params, onSuccess, onFailure) {
+    var url = getGasUrl();
+    if (!url) { openSetup(); return; }
+    var qs = Object.keys(params).map(function(k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+    fetch(url + '?' + qs)
+      .then(function(r) { return r.json(); })
+      .then(onSuccess)
+      .catch(function(e) {
+        if (onFailure) onFailure(e);
+        else toast('通信エラー: ' + (e.message || String(e)));
+      });
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 初期化
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  var allTasks = [], currentFilter = '全て', fSelectedCat = '';
+  var taskOrig = {}, noteCache = {};
+
+  document.addEventListener('DOMContentLoaded', function() {
+    setHeaderDate();
+    document.getElementById('fDate').value = todayISO();
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeModal(); closeSetup(); } });
+
+    if (!getGasUrl()) {
+      openSetup();
+    } else {
+      loadTasks();
+    }
+  });
+
+  function todayISO() { var d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function weekLaterISO() { var d=new Date(); d.setDate(d.getDate()+7); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function pad(n) { return String(n).padStart(2,'0'); }
+  function setHeaderDate() {
+    var d=new Date(), days=['日','月','火','水','木','金','土'];
+    document.getElementById('hDate').textContent = d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日('+days[d.getDay()]+')';
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // セットアップ
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function openSetup() {
+    var inp = document.getElementById('gasUrlInput');
+    if (inp) inp.value = getGasUrl();
+    document.getElementById('setup-overlay').classList.add('open');
+  }
+  function closeSetup() { document.getElementById('setup-overlay').classList.remove('open'); }
+  function onSetupOverlayClick(e) { if (e.target === document.getElementById('setup-overlay')) closeSetup(); }
+  function saveSetup() {
+    var url = (document.getElementById('gasUrlInput').value || '').trim();
+    if (!url || !url.startsWith('https://script.google.com')) {
+      toast('正しい GAS URL を入力してください'); return;
+    }
+    localStorage.setItem(GAS_KEY, url);
+    closeSetup();
+    toast('設定を保存しました');
+    loadTasks();
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // データ読み込み
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function loadTasks() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div>読み込み中...</div>';
+    gasCall({ action: 'getTasks' }, onLoaded, function(e) {
+      document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><p>読み込みエラー: ' + esc(e.message || String(e)) + '</p></div>';
+    });
+  }
+  function onLoaded(d) {
+    if (d && d.error) {
+      document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><p>' + esc(d.error) + '</p></div>';
+      return;
+    }
+    allTasks = Array.isArray(d) ? d : [];
+    render();
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // レンダリング
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function render() {
+    var today=todayISO(), inWeek=weekLaterISO();
+    var filtered = currentFilter==='全て' ? allTasks : allTasks.filter(function(t){return t.category===currentFilter;});
+    document.getElementById('hCount').textContent = '未完了 '+allTasks.length+'件';
+
+    var groups = {
+      urgent:{label:'期限切れ',cls:'urgent',tasks:[]},
+      today: {label:'今日',    cls:'today', tasks:[]},
+      week:  {label:'今週',    cls:'week',  tasks:[]},
+      later: {label:'今後',    cls:'later', tasks:[]},
+      nodate:{label:'日付なし',cls:'nodate',tasks:[]}
+    };
+    filtered.forEach(function(t) {
+      if      (!t.dateISO)          groups.nodate.tasks.push(t);
+      else if (t.dateISO < today)   groups.urgent.tasks.push(t);
+      else if (t.dateISO === today) groups.today.tasks.push(t);
+      else if (t.dateISO <= inWeek) groups.week.tasks.push(t);
+      else                          groups.later.tasks.push(t);
+    });
+
+    var html='';
+    ['urgent','today','week','later','nodate'].forEach(function(k){
+      var g=groups[k]; if(!g.tasks.length) return;
+      html += '<div class="group '+g.cls+'">'+
+        '<div class="group-hdr" onclick="toggleGroup(this)">'+
+          '<span class="g-dot"></span><span class="g-name">'+g.label+'</span>'+
+          '<span class="g-count">'+g.tasks.length+'</span><span class="g-chev open">▶</span>'+
+        '</div>'+
+        '<div class="group-body open">'+g.tasks.map(function(t){return buildRow(t,today);}).join('')+'</div>'+
+      '</div>';
+    });
+    if(!html) html='<div class="empty"><div class="empty-icon">✅</div><p>'+(currentFilter==='全て'?'タスクがありません':currentFilter+'のタスクはありません')+'</p></div>';
+    document.getElementById('content').innerHTML = html;
+
+    // contenteditable を JS で安全にセット
+    filtered.forEach(function(t){
+      var tn=document.getElementById('tn-'+t.row);
+      if(tn){ tn.textContent=t.task; taskOrig[t.row]=t.task; }
+      var nc=document.getElementById('nc-'+t.row);
+      if(nc){
+        nc.innerHTML = t.note||'';
+        noteCache[t.row] = nc.innerHTML;
+        refreshPlaceholder(nc);
+        var hasNote = nc.textContent.trim() !== '';
+        if(hasNote) { var na=document.getElementById('na-'+t.row); if(na) na.classList.add('open'); }
+        var nt=document.getElementById('nt-'+t.row);
+        if(nt){ nt.textContent=hasNote?'📝':'🗒'; if(hasNote) nt.classList.add('has-note'); }
+      }
+    });
+  }
+
+  function buildRow(t, today) {
+    var r=t.row;
+    var isOverdue=t.dateISO&&t.dateISO<today, isToday=t.dateISO===today;
+    var dlCls='dl-badge '+(isOverdue?'overdue':isToday?'today':'normal');
+
+    var dateHtml = t.dateISO
+      ? '<span class="'+dlCls+'" id="dd-'+r+'" onclick="event.stopPropagation();showDateEdit('+r+')">'+t.date+'</span>'+
+        '<input type="date" class="inline-input" id="di-'+r+'" value="'+t.dateISO+'" style="display:none" onblur="saveDateField('+r+',this)" onkeydown="dateKey(event,'+r+')">'
+      : '<span class="add-meta-btn" id="dd-'+r+'" onclick="event.stopPropagation();showDateEdit('+r+')">＋日付</span>'+
+        '<input type="date" class="inline-input" id="di-'+r+'" style="display:none" onblur="saveDateField('+r+',this)" onkeydown="dateKey(event,'+r+')">';
+
+    var timeHtml = t.time
+      ? '<span class="dl-time" id="td-'+r+'" onclick="event.stopPropagation();showTimeEdit('+r+')">'+t.time+'締切</span>'+
+        '<input type="time" class="inline-input" id="ti-'+r+'" value="'+t.time+'" style="display:none" onblur="saveTimeField('+r+',this)" onkeydown="timeKey(event,'+r+')">'
+      : '<span class="add-meta-btn" id="td-'+r+'" onclick="event.stopPropagation();showTimeEdit('+r+')">＋時間</span>'+
+        '<input type="time" class="inline-input" id="ti-'+r+'" style="display:none" onblur="saveTimeField('+r+',this)" onkeydown="timeKey(event,'+r+')">';
+
+    var calBtn = t.skip
+      ? '<button class="btn-cal" disabled style="opacity:.3" title="カレンダー登録不要">📅</button>'
+      : '<button class="btn-cal'+(t.registered?' cal-reg':'')+'" onclick="event.stopPropagation();regCal('+r+',this)"'+(t.registered?' disabled':'')+' title="'+(t.registered?'登録済':'カレンダーに登録')+'">📅</button>';
+
+    var toolbar =
+      '<div class="note-toolbar" id="tb-'+r+'">'+
+        '<button class="tb-btn tb-bold" data-tip="太字" onmousedown="event.preventDefault();fmtNote(\'bold\')">B</button>'+
+        '<button class="tb-btn tb-italic" data-tip="斜体" onmousedown="event.preventDefault();fmtNote(\'italic\')">I</button>'+
+        '<button class="tb-btn tb-strike" data-tip="打消し線" onmousedown="event.preventDefault();fmtNote(\'strikeThrough\')">S</button>'+
+        '<span class="tb-sep"></span>'+
+        '<button class="tb-btn" data-tip="箇条書き" onmousedown="event.preventDefault();fmtNote(\'insertUnorderedList\')"><span style="font-size:15px;line-height:1">≡</span></button>'+
+        '<button class="tb-btn" data-tip="番号付きリスト" onmousedown="event.preventDefault();fmtNote(\'insertOrderedList\')"><span style="font-size:11px;font-weight:700">1≡</span></button>'+
+        '<span class="tb-sep"></span>'+
+        '<button class="tb-btn" data-tip="引用" onmousedown="event.preventDefault();fmtBlock(\'blockquote\')"><span style="font-size:14px">❝</span></button>'+
+        '<button class="tb-btn tb-code" data-tip="コードブロック" onmousedown="event.preventDefault();fmtBlock(\'pre\')">&lt;/&gt;</button>'+
+      '</div>';
+
+    return '<div class="task-row" id="card-'+r+'">'+
+      '<div class="task-body">'+
+        '<div class="task-top">'+
+          '<button class="star-btn'+(t.priority?' active':'')+'" onclick="event.stopPropagation();starTask('+r+',this)">★</button>'+
+          '<div class="task-info-col">'+
+            '<div class="task-name-edit'+(t.priority?' priority':'')+'" contenteditable="true" id="tn-'+r+'" '+
+              'onclick="event.stopPropagation()" onblur="saveTaskName('+r+',this)" onkeydown="nameKey(event,'+r+',this)"></div>'+
+            '<div class="task-sub">'+dateHtml+timeHtml+
+              (t.category?'<span class="cat-badge cat-'+t.category+'">'+esc(t.category)+'</span>':'')+
+              calBtn+
+              '<button class="note-toggle" id="nt-'+r+'" onclick="event.stopPropagation();toggleNote('+r+')" title="メモ">🗒</button>'+
+            '</div>'+
+          '</div>'+
+          '<button class="btn-done" id="done-'+r+'" onclick="event.stopPropagation();doneTask('+r+',this)">完了</button>'+
+        '</div>'+
+        '<div class="task-note" id="na-'+r+'">'+
+          toolbar+
+          '<div class="note-content" contenteditable="true" id="nc-'+r+'" '+
+            'onfocus="noteActive('+r+')" onblur="noteDeact('+r+',this)" '+
+            'oninput="refreshPlaceholder(this)" '+
+            'onkeydown="noteKeyDown(event,'+r+')"></div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // UI インタラクション
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function toggleGroup(hdr) { hdr.querySelector('.g-chev').classList.toggle('open'); hdr.nextElementSibling.classList.toggle('open'); }
+  function filterBy(cat,el) { currentFilter=cat; document.querySelectorAll('.pill').forEach(function(p){p.classList.remove('active');}); el.classList.add('active'); render(); }
+
+  function toggleNote(row) {
+    var na=document.getElementById('na-'+row); if(!na) return;
+    var opening=!na.classList.contains('open');
+    na.classList.toggle('open');
+    if(opening){ var nc=document.getElementById('nc-'+row); if(nc) setTimeout(function(){nc.focus();},50); }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // タスク操作
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function doneTask(row,btn) {
+    btn.disabled=true; btn.textContent='...';
+    gasCall({ action:'completeTask', row:row },
+      function() {
+        var c=document.getElementById('card-'+row); if(c) c.classList.add('done-anim');
+        setTimeout(function(){ allTasks=allTasks.filter(function(t){return t.row!==row;}); render(); toast('完了しました'); },260);
+      },
+      function(){ btn.disabled=false; btn.textContent='完了'; toast('エラーが発生しました'); }
+    );
+  }
+
+  function regCal(row,btn) {
+    btn.disabled=true; btn.textContent='...';
+    gasCall({ action:'registerCalendar', row:row },
+      function(res) {
+        if(res.success){ var i=allTasks.findIndex(function(t){return t.row===row;}); if(i!==-1) allTasks[i].registered=true; render(); toast('カレンダーに登録しました'); }
+        else { btn.disabled=false; btn.textContent='📅'; var m={already_registered:'すでに登録済みです',skip_enabled:'登録不要に設定されています',missing_data:'日付・時間・タスク名を入力してください'}; toast(m[res.reason]||'エラーが発生しました'); }
+      },
+      function(){ btn.disabled=false; btn.textContent='📅'; toast('エラーが発生しました'); }
+    );
+  }
+
+  function starTask(row,btn) {
+    gasCall({ action:'togglePriority', row:row },
+      function(res){ if(res.success){ var i=allTasks.findIndex(function(t){return t.row===row;}); if(i!==-1) allTasks[i].priority=res.value; render(); toast(res.value?'優先タスクに設定':'優先を解除'); } },
+      function(){ toast('エラーが発生しました'); }
+    );
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // インライン編集
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function nameKey(e,row,el) {
+    if(e.key==='Enter'){e.preventDefault();el.blur();}
+    if(e.key==='Escape'){el.textContent=taskOrig[row]||'';el.blur();}
+  }
+  function saveTaskName(row,el) {
+    var v=el.textContent.trim();
+    if(!v){el.textContent=taskOrig[row]||'';return;}
+    if(v===taskOrig[row]) return;
+    taskOrig[row]=v;
+    var i=allTasks.findIndex(function(t){return t.row===row;}); if(i!==-1) allTasks[i].task=v;
+    pushField(row,'task',v);
+  }
+
+  function showDateEdit(row){var dd=document.getElementById('dd-'+row),di=document.getElementById('di-'+row);if(dd)dd.style.display='none';if(di){di.style.display='';di.focus();}}
+  function hideDateEdit(row){var dd=document.getElementById('dd-'+row),di=document.getElementById('di-'+row);if(di)di.style.display='none';if(dd)dd.style.display='';}
+  function dateKey(e,row){if(e.key==='Enter'){e.preventDefault();document.getElementById('di-'+row).blur();}if(e.key==='Escape'){var di=document.getElementById('di-'+row);if(di)di._cancel=true;hideDateEdit(row);}}
+  function saveDateField(row,inp) {
+    if(inp._cancel){inp._cancel=false;return;}
+    var v=inp.value,i=allTasks.findIndex(function(t){return t.row===row;});
+    if(i!==-1&&v===allTasks[i].dateISO){hideDateEdit(row);return;}
+    if(i!==-1){allTasks[i].dateISO=v;if(v){var p=v.split('-');allTasks[i].date=p[1]+'/'+p[2];}else{allTasks[i].date='';}}
+    pushField(row,'date',v);render();
+  }
+
+  function showTimeEdit(row){var td=document.getElementById('td-'+row),ti=document.getElementById('ti-'+row);if(td)td.style.display='none';if(ti){ti.style.display='';ti.focus();}}
+  function hideTimeEdit(row){var td=document.getElementById('td-'+row),ti=document.getElementById('ti-'+row);if(ti)ti.style.display='none';if(td)td.style.display='';}
+  function timeKey(e,row){if(e.key==='Enter'){e.preventDefault();document.getElementById('ti-'+row).blur();}if(e.key==='Escape'){var ti=document.getElementById('ti-'+row);if(ti)ti._cancel=true;hideTimeEdit(row);}}
+  function saveTimeField(row,inp) {
+    if(inp._cancel){inp._cancel=false;return;}
+    var v=inp.value,i=allTasks.findIndex(function(t){return t.row===row;});if(i!==-1)allTasks[i].time=v;
+    var td=document.getElementById('td-'+row);if(td)td.textContent=v?v+'締切':'＋時間';
+    hideTimeEdit(row);pushField(row,'time',v);
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // リッチテキストノート
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function noteKeyDown(e,row) {
+    if(e.key==='Tab'){e.preventDefault();e.stopPropagation();document.execCommand(e.shiftKey?'outdent':'indent',false,null);return;}
+    if(e.key===' '||e.key==='Spacebar'){
+      var sel=window.getSelection();if(!sel||!sel.rangeCount||!sel.isCollapsed)return;
+      var range=sel.getRangeAt(0),node=range.startContainer;if(node.nodeType!==3)return;
+      var tb=node.textContent.slice(0,range.startOffset),mdCmd=null;
+      if(tb==='>'){mdCmd=function(){document.execCommand('formatBlock',false,'blockquote');};}
+      else if(tb==='-'||tb==='*'){mdCmd=function(){document.execCommand('insertUnorderedList');};}
+      else if(/^\d+\.$/.test(tb)){mdCmd=function(){document.execCommand('insertOrderedList');};}
+      if(mdCmd){e.preventDefault();for(var i=0;i<tb.length;i++)document.execCommand('delete');mdCmd();}
+    }
+  }
+  function noteActive(row){var tb=document.getElementById('tb-'+row),nc=document.getElementById('nc-'+row);if(tb)tb.classList.add('show');if(nc)noteCache[row]=nc.innerHTML;}
+  function noteDeact(row,el){
+    setTimeout(function(){
+      var tb=document.getElementById('tb-'+row);if(tb)tb.classList.remove('show');
+      if(/^(<br\s*\/?>|\s)*$/i.test(el.innerHTML))el.innerHTML='';
+      var cur=el.innerHTML;
+      if(cur!==noteCache[row]){noteCache[row]=cur;var i=allTasks.findIndex(function(t){return t.row===row;});if(i!==-1)allTasks[i].note=cur;pushField(row,'note',cur);}
+      refreshPlaceholder(el);
+      var hasNote=cur&&el.textContent.trim()!=='';
+      var nt=document.getElementById('nt-'+row);if(nt){nt.textContent=hasNote?'📝':'🗒';hasNote?nt.classList.add('has-note'):nt.classList.remove('has-note');}
+    },160);
+  }
+  function fmtNote(cmd){document.execCommand(cmd,false,null);}
+  function fmtBlock(tag){
+    var sel=window.getSelection();if(!sel||!sel.anchorNode)return;
+    var node=sel.anchorNode;while(node&&node.nodeType!==1)node=node.parentNode;
+    while(node){
+      if(node.classList&&node.classList.contains('note-content'))break;
+      if(node.tagName&&node.tagName.toLowerCase()===tag){var frag=document.createDocumentFragment();while(node.firstChild)frag.appendChild(node.firstChild);node.parentNode.replaceChild(frag,node);return;}
+      node=node.parentNode;
+    }
+    document.execCommand('formatBlock',false,tag);
+  }
+  function refreshPlaceholder(el){if(!el.textContent.trim()&&!el.querySelector('img'))el.classList.add('is-empty');else el.classList.remove('is-empty');}
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // サーバー保存
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function pushField(row,field,value) {
+    gasCall({
+      action: 'updateTask',
+      data: JSON.stringify({row:row,field:field,value:value})
+    }, function(res){ if(!res.success) toast('保存に失敗しました'); },
+    function(){ toast('保存エラー'); });
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // タスク追加モーダル
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  function openModal(){document.getElementById('overlay').classList.add('open');setTimeout(function(){document.getElementById('fTask').focus();},300);}
+  function closeModal(){document.getElementById('overlay').classList.remove('open');}
+  function onOverlayClick(e){if(e.target===document.getElementById('overlay'))closeModal();}
+  function formKeyDown(e){
+    if(e.key==='Enter'){e.preventDefault();document.getElementById('fDate').focus();}
+    if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();submitTask();}
+  }
+  function selectCat(el){
+    fSelectedCat=el.dataset.cat;
+    document.querySelectorAll('.cat-pick-btn').forEach(function(b){b.classList.remove('active');});
+    el.classList.add('active');
+  }
+  function submitTask() {
+    var task=document.getElementById('fTask').value.trim();
+    if(!task){toast('タスク名を入力してください');document.getElementById('fTask').focus();return;}
+    var btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent='追加中...';
+    var payload={task:task,date:document.getElementById('fDate').value,time:document.getElementById('fTime').value,
+      category:fSelectedCat,note:document.getElementById('fNote').value,
+      priority:document.getElementById('fPriority').checked,skip:document.getElementById('fSkip').checked};
+    gasCall({ action:'addTask', data:JSON.stringify(payload) },
+      function(res){ btn.disabled=false;btn.textContent='追加する';if(res.success){closeModal();resetForm();loadTasks();toast(res.calendarRegistered?'タスクとカレンダーを追加しました':'タスクを追加しました');}else{toast(res.error||'エラーが発生しました');} },
+      function(){btn.disabled=false;btn.textContent='追加する';toast('エラーが発生しました');}
+    );
+  }
+  function resetForm(){
+    document.getElementById('fTask').value=document.getElementById('fNote').value='';
+    document.getElementById('fDate').value=todayISO();document.getElementById('fTime').value='23:59';
+    document.getElementById('fPriority').checked=document.getElementById('fSkip').checked=false;
+    fSelectedCat='';document.querySelectorAll('.cat-pick-btn').forEach(function(b){b.classList.remove('active');});
+    document.querySelector('.cat-pick-btn[data-cat=""]').classList.add('active');
+  }
+
+  function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},2600);}
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+</script>
+</body>
+</html>
