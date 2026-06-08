@@ -5,3 +5,6 @@ icon512.png
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code ローカル設定（個人環境固有のため除外）
+.claude/
