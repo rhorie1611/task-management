@@ -732,23 +732,50 @@
     if(!task){toast('タスク名を入力してください');document.getElementById('fTask').focus();return;}
     var fnc=document.getElementById('fNoteContent');
     var noteVal=fnc?fnc.innerHTML:'';if(/^(<br\s*\/?>|\s)*$/i.test(noteVal))noteVal='';
-    var payload={task:task,date:document.getElementById('fDate').value,time:document.getElementById('fTime').value,
-      category:fSelectedCat,note:noteVal,
-      priority:document.getElementById('fPriority').checked,skip:document.getElementById('fSkip').checked};
+    var dateVal=document.getElementById('fDate').value;
+    var timeVal=document.getElementById('fTime').value;
+    var priVal=document.getElementById('fPriority').checked;
+    var skipVal=document.getElementById('fSkip').checked;
+    var payload={task:task,date:dateVal,time:timeVal,
+      category:fSelectedCat,note:noteVal,priority:priVal,skip:skipVal};
 
-    // 楽観的UI更新: 即座にモーダルを閉じてバックグラウンドでGAS実行
+    // ① 仮タスクを即座にUIへ追加（楽観的更新）
+    var tempId='temp_'+Date.now();
+    var dateStr='';
+    if(dateVal){var dp=dateVal.split('-');dateStr=dp[1]+'/'+dp[2];}
+    var tempTask={
+      row:tempId, task:task, date:dateStr, dateISO:dateVal||'',
+      time:timeVal||'', category:fSelectedCat, note:noteVal,
+      priority:priVal, skip:skipVal, registered:false, hasEvent:false
+    };
+    allTasks.push(tempTask);
+    render();
     closeModal();
     resetForm();
-    toast('追加中...');
+    toast('追加しました');
 
+    // ② バックグラウンドでGAS実行
     gasCall({ action:'addTask', data:JSON.stringify(payload) },
       function(res){
         if(res.success){
-          pendingToast_=res.calendarRegistered?'タスクとカレンダーを追加しました':'タスクを追加しました';
-          loadTasks();
-        } else { toast(res.error||'エラーが発生しました'); }
+          // ③ ローディングなしでサイレント再取得（仮タスクを正式IDに置き換える）
+          gasCall({ action:'getTasks' }, function(d){
+            if(d && !d.error && Array.isArray(d)){ allTasks=d; render(); }
+            if(res.calendarRegistered) toast('カレンダーにも登録しました');
+          }, null);
+        } else {
+          // 失敗時: 仮タスクを除去
+          allTasks=allTasks.filter(function(t){return t.row!==tempId;});
+          render();
+          toast(res.error||'エラーが発生しました');
+        }
       },
-      function(){ toast('通信エラーが発生しました'); }
+      function(){
+        // 通信エラー: 仮タスクを除去
+        allTasks=allTasks.filter(function(t){return t.row!==tempId;});
+        render();
+        toast('通信エラーが発生しました');
+      }
     );
   }
   function resetForm(){
