@@ -258,6 +258,24 @@ function updateTask(json) {
     else if (d.field === 'time')     tasks[idx].time     = d.value;
     else if (d.field === 'category') tasks[idx].category = d.value;
 
+    // カレンダーイベントがある場合、時間・日付・タスク名の変更をカレンダーにも反映
+    const t = tasks[idx];
+    if (t.eventId && (d.field === 'task' || d.field === 'time' || d.field === 'date')) {
+      try {
+        const cal = CalendarApp.getCalendarById(CALENDAR_ID);
+        const ev  = cal.getEventById(String(t.eventId));
+        if (ev) {
+          // タイトルを最新の時間・タスク名で更新
+          ev.setTitle(`【${t.time || ''}締切】${t.task || ''}`);
+          // 日付変更の場合は開催日程も更新
+          if (d.field === 'date' && t.date) {
+            const [y, m, day] = t.date.split('-').map(Number);
+            ev.setTime(new Date(y, m-1, day, 4, 0, 0), new Date(y, m-1, day, 6, 0, 0));
+          }
+        }
+      } catch(_) {}
+    }
+
     saveTasks_(tasks);
     return JSON.stringify({ success: true });
   } catch(e) {
