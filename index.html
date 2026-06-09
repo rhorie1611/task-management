@@ -480,24 +480,25 @@
 
   function buildRow(t, today) {
     var r=t.row;
+    var rq="'"+r+"'"; // 文字列IDをonclick属性内で正しく引用するためのラッパー
     var isOverdue=t.dateISO&&t.dateISO<today, isToday=t.dateISO===today;
     var dlCls='dl-badge '+(isOverdue?'overdue':isToday?'today':'normal');
 
     var dateHtml = t.dateISO
-      ? '<span class="'+dlCls+'" id="dd-'+r+'" onclick="event.stopPropagation();showDateEdit('+r+')">'+t.date+'</span>'+
-        '<input type="date" class="inline-input" id="di-'+r+'" value="'+t.dateISO+'" style="display:none" onblur="saveDateField('+r+',this)" onkeydown="dateKey(event,'+r+')">'
-      : '<span class="add-meta-btn" id="dd-'+r+'" onclick="event.stopPropagation();showDateEdit('+r+')">＋日付</span>'+
-        '<input type="date" class="inline-input" id="di-'+r+'" style="display:none" onblur="saveDateField('+r+',this)" onkeydown="dateKey(event,'+r+')">';
+      ? '<span class="'+dlCls+'" id="dd-'+r+'" onclick="event.stopPropagation();showDateEdit('+rq+')">'+t.date+'</span>'+
+        '<input type="date" class="inline-input" id="di-'+r+'" value="'+t.dateISO+'" style="display:none" onblur="saveDateField('+rq+',this)" onkeydown="dateKey(event,'+rq+')">'
+      : '<span class="add-meta-btn" id="dd-'+r+'" onclick="event.stopPropagation();showDateEdit('+rq+')">＋日付</span>'+
+        '<input type="date" class="inline-input" id="di-'+r+'" style="display:none" onblur="saveDateField('+rq+',this)" onkeydown="dateKey(event,'+rq+')">';
 
     var timeHtml = t.time
-      ? '<span class="dl-time" id="td-'+r+'" onclick="event.stopPropagation();showTimeEdit('+r+')">'+t.time+'締切</span>'+
-        '<input type="time" class="inline-input" id="ti-'+r+'" value="'+t.time+'" style="display:none" onblur="saveTimeField('+r+',this)" onkeydown="timeKey(event,'+r+')">'
-      : '<span class="add-meta-btn" id="td-'+r+'" onclick="event.stopPropagation();showTimeEdit('+r+')">＋時間</span>'+
-        '<input type="time" class="inline-input" id="ti-'+r+'" style="display:none" onblur="saveTimeField('+r+',this)" onkeydown="timeKey(event,'+r+')">';
+      ? '<span class="dl-time" id="td-'+r+'" onclick="event.stopPropagation();showTimeEdit('+rq+')">'+t.time+'締切</span>'+
+        '<input type="time" class="inline-input" id="ti-'+r+'" value="'+t.time+'" style="display:none" onblur="saveTimeField('+rq+',this)" onkeydown="timeKey(event,'+rq+')">'
+      : '<span class="add-meta-btn" id="td-'+r+'" onclick="event.stopPropagation();showTimeEdit('+rq+')">＋時間</span>'+
+        '<input type="time" class="inline-input" id="ti-'+r+'" style="display:none" onblur="saveTimeField('+rq+',this)" onkeydown="timeKey(event,'+rq+')">';
 
     var calBtn = t.skip
       ? '<button class="btn-cal" disabled style="opacity:.3" title="カレンダー登録不要">📅</button>'
-      : '<button class="btn-cal'+(t.registered?' cal-reg':'')+'" onclick="event.stopPropagation();regCal('+r+',this)"'+(t.registered?' disabled':'')+' title="'+(t.registered?'登録済':'カレンダーに登録')+'">📅</button>';
+      : '<button class="btn-cal'+(t.registered?' cal-reg':'')+'" onclick="event.stopPropagation();regCal('+rq+',this)"'+(t.registered?' disabled':'')+' title="'+(t.registered?'登録済':'カレンダーに登録')+'">📅</button>';
 
     var toolbar =
       '<div class="note-toolbar" id="tb-'+r+'">'+
@@ -515,24 +516,24 @@
     return '<div class="task-row" id="card-'+r+'">'+
       '<div class="task-body">'+
         '<div class="task-top">'+
-          '<button class="star-btn'+(t.priority?' active':'')+'" onclick="event.stopPropagation();starTask('+r+',this)">★</button>'+
+          '<button class="star-btn'+(t.priority?' active':'')+'" onclick="event.stopPropagation();starTask('+rq+',this)">★</button>'+
           '<div class="task-info-col">'+
             '<div class="task-name-edit'+(t.priority?' priority':'')+'" contenteditable="true" id="tn-'+r+'" '+
-              'onclick="event.stopPropagation()" onblur="saveTaskName('+r+',this)" onkeydown="nameKey(event,'+r+',this)"></div>'+
+              'onclick="event.stopPropagation()" onblur="saveTaskName('+rq+',this)" onkeydown="nameKey(event,'+rq+',this)"></div>'+
             '<div class="task-sub">'+dateHtml+timeHtml+
               (t.category?'<span class="cat-badge cat-'+t.category+'">'+esc(t.category)+'</span>':'')+
               calBtn+
-              '<button class="note-toggle" id="nt-'+r+'" onclick="event.stopPropagation();toggleNote('+r+')" title="メモ">🗒</button>'+
+              '<button class="note-toggle" id="nt-'+r+'" onclick="event.stopPropagation();toggleNote('+rq+')" title="メモ">🗒</button>'+
             '</div>'+
           '</div>'+
-          '<button class="btn-done" id="done-'+r+'" onclick="event.stopPropagation();doneTask('+r+',this)">完了</button>'+
+          '<button class="btn-done" id="done-'+r+'" onclick="event.stopPropagation();doneTask('+rq+',this)">完了</button>'+
         '</div>'+
         '<div class="task-note" id="na-'+r+'">'+
           toolbar+
           '<div class="note-content" contenteditable="true" id="nc-'+r+'" '+
-            'onfocus="noteActive('+r+')" onblur="noteDeact('+r+',this)" '+
+            'onfocus="noteActive('+rq+')" onblur="noteDeact('+rq+',this)" '+
             'oninput="refreshPlaceholder(this)" '+
-            'onkeydown="noteKeyDown(event,'+r+')"></div>'+
+            'onkeydown="noteKeyDown(event,'+rq+')"></div>'+
         '</div>'+
       '</div>'+
     '</div>';
