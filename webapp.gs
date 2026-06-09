@@ -2,6 +2,7 @@
 const CALENDAR_ID = '916b37fd8ea730ceae1f54f1ea729ac6f96c033fdfec9304ae3bccfed3af6579@group.calendar.google.com';
 const FILE_NAME   = 'task-management-tasks.json';
 const FILE_KEY    = 'TASKS_FILE_ID';   // ScriptProperties のキー
+const CACHE_KEY   = 'tasks_v1';        // CacheService のキー（Drive読み込みを高速化）
 
 // ===== API エントリーポイント =====
 function doGet(e) {
@@ -48,16 +49,26 @@ function getOrCreateFile_() {
   return file;
 }
 
-/** Drive JSON からタスク配列を読み込む */
+/** Drive JSON からタスク配列を読み込む（CacheServiceで高速化） */
 function loadTasks_() {
   try {
+    // まずキャッシュを確認（数十ms）
+    const cache = CacheService.getScriptCache();
+    const hit   = cache.get(CACHE_KEY);
+    if (hit) {
+      try { const c = JSON.parse(hit); if (Array.isArray(c)) return c; } catch(_) {}
+    }
+    // キャッシュミス → Driveから読み込み（1〜2秒）
     const content = getOrCreateFile_().getBlob().getDataAsString('UTF-8');
-    const parsed  = JSON.parse(content);
-    return Array.isArray(parsed) ? parsed : [];
+    const tasks   = JSON.parse(content);
+    const result  = Array.isArray(tasks) ? tasks : [];
+    // 次回のために6時間キャッシュ
+    try { cache.put(CACHE_KEY, JSON.stringify(result), 21600); } catch(_) {}
+    return result;
   } catch(_) { return []; }
 }
 
-/** タスク配列を Drive JSON に書き込む */
+/** タスク配列を Drive JSON に書き込む（キャッシュも更新） */
 function saveTasks_(tasks) {
   const file    = getOrCreateFile_();
   const content = JSON.stringify(tasks, null, 2);
@@ -74,6 +85,8 @@ function saveTasks_(tasks) {
   if (res.getResponseCode() !== 200) {
     throw new Error('Drive保存エラー ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
   }
+  // キャッシュを最新状態に更新
+  try { CacheService.getScriptCache().put(CACHE_KEY, JSON.stringify(tasks), 21600); } catch(_) {}
 }
 
 /** ユニークIDを生成 */

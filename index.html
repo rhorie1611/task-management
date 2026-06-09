@@ -365,6 +365,7 @@
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   var allTasks = [], currentFilter = '全て', fSelectedCat = '';
   var taskOrig = {}, noteCache = {};
+  var pendingToast_ = ''; // loadTasks完了後に表示するトースト
 
   document.addEventListener('DOMContentLoaded', function() {
     setHeaderDate();
@@ -423,6 +424,7 @@
     }
     allTasks = Array.isArray(d) ? d : [];
     render();
+    if (pendingToast_) { toast(pendingToast_); pendingToast_ = ''; }
   }
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -556,13 +558,19 @@
   // タスク操作
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   function doneTask(row,btn) {
-    btn.disabled=true; btn.textContent='...';
+    // 楽観的UI更新: 即座にUIから削除してGASはバックグラウンドで実行
+    var idx=allTasks.findIndex(function(t){return t.row===row;});
+    if(idx===-1) return;
+    var removed=allTasks.splice(idx,1)[0];
+    var card=document.getElementById('card-'+row);
+    if(card) card.classList.add('done-anim');
+    setTimeout(function(){ render(); toast('完了しました'); }, 260);
+
     gasCall({ action:'completeTask', row:row },
-      function() {
-        var c=document.getElementById('card-'+row); if(c) c.classList.add('done-anim');
-        setTimeout(function(){ allTasks=allTasks.filter(function(t){return t.row!==row;}); render(); toast('完了しました'); },260);
+      function(res) {
+        if(!res.success){ allTasks.splice(idx,0,removed); render(); toast('エラー: 元に戻しました'); }
       },
-      function(){ btn.disabled=false; btn.textContent='完了'; toast('エラーが発生しました'); }
+      function(){ allTasks.splice(idx,0,removed); render(); toast('通信エラー: 元に戻しました'); }
     );
   }
 
@@ -722,15 +730,25 @@
   function submitTask() {
     var task=document.getElementById('fTask').value.trim();
     if(!task){toast('タスク名を入力してください');document.getElementById('fTask').focus();return;}
-    var btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent='追加中...';
     var fnc=document.getElementById('fNoteContent');
     var noteVal=fnc?fnc.innerHTML:'';if(/^(<br\s*\/?>|\s)*$/i.test(noteVal))noteVal='';
     var payload={task:task,date:document.getElementById('fDate').value,time:document.getElementById('fTime').value,
       category:fSelectedCat,note:noteVal,
       priority:document.getElementById('fPriority').checked,skip:document.getElementById('fSkip').checked};
+
+    // 楽観的UI更新: 即座にモーダルを閉じてバックグラウンドでGAS実行
+    closeModal();
+    resetForm();
+    toast('追加中...');
+
     gasCall({ action:'addTask', data:JSON.stringify(payload) },
-      function(res){ btn.disabled=false;btn.textContent='追加する';if(res.success){closeModal();resetForm();loadTasks();toast(res.calendarRegistered?'タスクとカレンダーを追加しました':'タスクを追加しました');}else{toast(res.error||'エラーが発生しました');} },
-      function(){btn.disabled=false;btn.textContent='追加する';toast('エラーが発生しました');}
+      function(res){
+        if(res.success){
+          pendingToast_=res.calendarRegistered?'タスクとカレンダーを追加しました':'タスクを追加しました';
+          loadTasks();
+        } else { toast(res.error||'エラーが発生しました'); }
+      },
+      function(){ toast('通信エラーが発生しました'); }
     );
   }
   function resetForm(){
